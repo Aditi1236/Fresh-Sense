@@ -1,29 +1,81 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import Navbar from './components/Navbar'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import BatchDetails from './pages/BatchDetails'
-import Alerts from './pages/Alerts'
-import Simulation from './pages/Simulation'
+import React from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
+
+import Navbar from "./components/Navbar";
+
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Batches from "./pages/Batches";
+import BatchDetails from "./pages/BatchDetails";
+import Alerts from "./pages/Alerts";
+import Simulation from "./pages/Simulation";
+import Analytics from "./pages/Analytics";
 
 function Layout() {
-  const location = useLocation()
-  const hideNav = location.pathname === '/'
+  const location = useLocation();
+
+  // Login page par Navbar hide rahega
+  const hideNav = location.pathname === "/";
+
   return (
     <div className="min-h-screen bg-slate-950">
+
       {!hideNav && <Navbar />}
-      <main className={hideNav ? '' : 'pt-16'}>
+
+      <main className={hideNav ? "" : "pt-16"}>
         <Routes>
-          <Route path="/"              element={<Login />} />
-          <Route path="/dashboard"     element={<Dashboard />} />
-          <Route path="/batch/:batchId" element={<BatchDetails />} />
-          <Route path="/alerts"        element={<Alerts />} />
-          <Route path="/simulation"    element={<Simulation />} />
+
+          {/* LOGIN */}
+          <Route
+            path="/"
+            element={<Login />}
+          />
+
+          {/* DASHBOARD */}
+          <Route
+            path="/dashboard"
+            element={<Dashboard />}
+          />
+
+          {/* ALL BATCHES */}
+          <Route
+            path="/batches"
+            element={<Batches />}
+          />
+
+          {/* SINGLE BATCH DETAILS */}
+          <Route
+            path="/batch/:batchId"
+            element={<BatchDetails />}
+          />
+
+          {/* ALERTS */}
+          <Route
+            path="/alerts"
+            element={<Alerts />}
+          />
+
+          {/* SIMULATION */}
+          <Route
+            path="/simulation"
+            element={<Simulation />}
+          />
+
+          {/* ANALYTICS */}
+          <Route path="/analytics" 
+          element={<Analytics />} 
+          />
+
         </Routes>
       </main>
+
     </div>
-  )
+  );
 }
 
 export default function App() {
@@ -31,5 +83,5 @@ export default function App() {
     <BrowserRouter>
       <Layout />
     </BrowserRouter>
-  )
+  );
 }
