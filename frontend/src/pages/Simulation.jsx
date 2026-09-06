@@ -1,236 +1,380 @@
 import React, { useEffect, useState } from "react";
-import { simulate } from "../services/api";
-import RiskBadge from "../components/RiskBadge";
+import { useNavigate } from "react-router-dom";
+import { useApp } from "../App";
+
+const steps = [
+  { time: "10:00", risk: 18, temp: 4.2, humidity: 82 },
+  { time: "11:00", risk: 35, temp: 5.1, humidity: 83 },
+  { time: "12:00", risk: 52, temp: 6.3, humidity: 84 },
+  { time: "13:00", risk: 67, temp: 7.2, humidity: 85 },
+  { time: "14:00", risk: 78, temp: 8.1, humidity: 86 },
+  { time: "15:00", risk: 84, temp: 8.7, humidity: 88 },
+];
 
 function Simulation() {
-  const [history, setHistory] = useState([]);
+  const navigate = useNavigate();
+  const { updateBatch } = useApp();
+
   const [currentStep, setCurrentStep] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [lastRisk, setLastRisk] = useState(null);
+  const [running, setRunning] = useState(false);
+
+  const current = steps[currentStep];
 
   useEffect(() => {
-    const initHistory = [
-      { timestamp: "10:00", risk: 18, status: "SAFE" },
-      { timestamp: "11:00", risk: 35, status: "MEDIUM" },
-      { timestamp: "12:00", risk: 52, status: "HIGH" },
-      { timestamp: "13:00", risk: 78, status: "HIGH" },
-      { timestamp: "14:00", risk: 84, status: "HIGH" },
-      { timestamp: "15:00", risk: 91, status: "CRITICAL" },
-    ];
+    if (!running) return;
 
-    setHistory(initHistory);
-  }, []);
+    if (currentStep >= steps.length - 1) {
+      setRunning(false);
 
-  const handleStart = () => {
-    if (!isRunning) {
-      setIsRunning(true);
-      simulate().catch(() => {});
+      updateBatch("B002", {
+        temperature: 8.7,
+        humidity: 88,
+        transitTime: 36,
+        risk: 84,
+        status: "HIGH",
+      });
+
+      return;
     }
+
+    const timer = setTimeout(() => {
+      setCurrentStep((prev) => prev + 1);
+
+      const next = steps[currentStep + 1];
+
+      updateBatch("B002", {
+        temperature: next.temp,
+        humidity: next.humidity,
+        transitTime: 31 + currentStep + 1,
+        risk: next.risk,
+        status:
+          next.risk >= 75
+            ? "HIGH"
+            : next.risk >= 50
+            ? "MEDIUM"
+            : "SAFE",
+      });
+    }, 1800);
+
+    return () => clearTimeout(timer);
+  }, [running, currentStep, updateBatch]);
+
+  const startSimulation = () => {
+    setCurrentStep(0);
+    setRunning(true);
+
+    updateBatch("B002", {
+      temperature: 4.2,
+      humidity: 82,
+      transitTime: 10,
+      risk: 18,
+      status: "SAFE",
+    });
   };
 
-  const handleStop = () => {
-    setIsRunning(false);
+  const resetSimulation = () => {
+    setRunning(false);
+    setCurrentStep(0);
+
+    updateBatch("B002", {
+      temperature: 4.2,
+      humidity: 82,
+      transitTime: 10,
+      risk: 18,
+      status: "SAFE",
+    });
   };
 
-  const handleNext = () => {
-    if (currentStep < history.length - 1) {
-      const nextStep = currentStep + 1;
-      setCurrentStep(nextStep);
-      setLastRisk(history[nextStep].risk);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (currentStep > 0) {
-      const prevStep = currentStep - 1;
-      setCurrentStep(prevStep);
-      setLastRisk(history[prevStep].risk);
-    }
-  };
-
-  const getRiskClass = (risk) => {
-    if (risk <= 30) return "simulation-safe";
-    if (risk <= 60) return "simulation-medium";
-    if (risk <= 80) return "simulation-high";
-    return "simulation-critical";
-  };
+  const riskStatus =
+    current.risk >= 75
+      ? "HIGH RISK"
+      : current.risk >= 50
+      ? "MEDIUM RISK"
+      : "SAFE";
 
   return (
     <div className="simulation-page">
-      <div className="simulation-container">
 
-        {/* Header */}
-        <div className="simulation-header">
-          <div>
-            <p className="simulation-eyebrow">PREDICTIVE ENGINE</p>
-            <h1>📈 Live Simulation</h1>
-            <p className="simulation-subtitle">
-              Observe how changing conditions can affect predicted spoilage risk.
-            </p>
+      {/* HEADER */}
+      <section className="simulation-header">
+        <div>
+          <div className="page-eyebrow">
+            PREDICTIVE ENGINE / LIVE SIMULATION
           </div>
 
-          <div className={`simulation-status ${isRunning ? "running" : ""}`}>
-            <span className="status-dot"></span>
-            {isRunning ? "SIMULATION RUNNING" : "READY"}
-          </div>
-        </div>
+          <h1>Live Risk Simulation</h1>
 
-        {/* Controls */}
-        <div className="simulation-controls">
-          <button
-            onClick={handleStart}
-            disabled={isRunning}
-            className="simulation-btn simulation-start"
-          >
-            ▶ START SIMULATION
-          </button>
-
-          <button
-            onClick={handleStop}
-            disabled={!isRunning}
-            className="simulation-btn simulation-stop"
-          >
-            ⏹ STOP
-          </button>
-        </div>
-
-        {/* Current Risk */}
-        <div className="simulation-current-card">
-          <div>
-            <span className="simulation-label">CURRENT PREDICTED RISK</span>
-
-            <div className="simulation-risk-number">
-              {history[currentStep]?.risk ?? 0}%
-            </div>
-
-            <div className="simulation-risk-status">
-              <RiskBadge level={history[currentStep]?.status} />
-            </div>
-          </div>
-
-          <div className="simulation-step">
-            <span>TIME</span>
-            <strong>{history[currentStep]?.timestamp}</strong>
-            <small>
-              Step {currentStep + 1} / {history.length}
-            </small>
-          </div>
-        </div>
-
-        {/* Timeline */}
-        <div className="simulation-card">
-          <div className="simulation-card-header">
-            <div>
-              <span className="simulation-eyebrow">RISK TIMELINE</span>
-              <h2>Temperature & Risk Over Time</h2>
-            </div>
-
-            <span className="simulation-live">
-              ● LIVE MODEL
-            </span>
-          </div>
-
-          <div className="simulation-timeline">
-            {history.map((entry, idx) => (
-              <div
-                key={idx}
-                className={`simulation-entry ${
-                  idx === currentStep ? "active" : ""
-                }`}
-                onClick={() => {
-                  setCurrentStep(idx);
-                  setLastRisk(entry.risk);
-                }}
-              >
-                <div className="simulation-time">
-                  {entry.timestamp}
-                </div>
-
-                <div className="simulation-line">
-                  <div className={`simulation-dot ${getRiskClass(entry.risk)}`}>
-                    {idx + 1}
-                  </div>
-
-                  {idx < history.length - 1 && (
-                    <div className="simulation-connector"></div>
-                  )}
-                </div>
-
-                <div className="simulation-info">
-                  <div className="simulation-risk-row">
-                    <strong>Risk: {entry.risk}%</strong>
-                    <RiskBadge level={entry.status} />
-                  </div>
-
-                  <div className="simulation-bar">
-                    <div
-                      className={`simulation-bar-fill ${getRiskClass(
-                        entry.risk
-                      )}`}
-                      style={{ width: `${entry.risk}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <div className="simulation-navigation">
-          <button
-            onClick={handlePrevious}
-            disabled={currentStep <= 0}
-            className="simulation-nav-btn"
-          >
-            ← Previous
-          </button>
-
-          <div className="simulation-progress">
-            <span>
-              Step <strong>{currentStep + 1}</strong> of{" "}
-              <strong>{history.length}</strong>
-            </span>
-
-            <div className="simulation-progress-track">
-              <div
-                className="simulation-progress-fill"
-                style={{
-                  width: `${
-                    ((currentStep + 1) / history.length) * 100
-                  }%`,
-                }}
-              ></div>
-            </div>
-          </div>
-
-          <button
-            onClick={handleNext}
-            disabled={currentStep >= history.length - 1}
-            className="simulation-nav-btn simulation-next"
-          >
-            Next →
-          </button>
-        </div>
-
-        {/* Last Risk */}
-        {lastRisk !== null && (
-          <div className="simulation-last-risk">
-            <span>LAST RECORDED RISK</span>
-            <strong>{lastRisk}%</strong>
-          </div>
-        )}
-
-        {/* Disclaimer */}
-        <div className="simulation-note">
-          <span>ⓘ</span>
           <p>
-            Simulation values are illustrative demo data used to demonstrate
-            how FreshSense can visualize changing spoilage-risk conditions.
+            Demonstrate how a cold-chain deviation turns sensor
+            readings into an early warning.
           </p>
         </div>
 
-      </div>
+        <div className="demo-ready">
+          <span></span>
+          READY FOR DEMO
+        </div>
+      </section>
+
+      {/* DEMO SCENARIO */}
+      <section className="scenario-card">
+        <div className="scenario-icon">⚡</div>
+
+        <div>
+          <h3>Judge Demo Scenario</h3>
+          <p>
+            Strawberry Batch B002 starts safe. A refrigeration
+            deviation gradually increases temperature and humidity;
+            FreshSense raises the predicted spoilage risk and
+            recommends action.
+          </p>
+        </div>
+      </section>
+
+      {/* MAIN GRID */}
+      <section className="simulation-grid">
+
+        {/* LEFT - BATCH */}
+        <div className="simulation-card batch-card">
+
+          <div className="batch-top">
+            <div>
+              <span className="batch-label">BATCH B002</span>
+
+              <h2>
+                <span className="strawberry-icon">🍓</span>
+                Strawberry
+              </h2>
+            </div>
+
+            <div
+              className={`risk-badge ${
+                current.risk >= 75
+                  ? "high"
+                  : current.risk >= 50
+                  ? "medium"
+                  : "safe"
+              }`}
+            >
+              {riskStatus}
+            </div>
+          </div>
+
+          {/* RISK */}
+          <div className="risk-section">
+            <div className="risk-number">
+              <span>{current.risk}%</span>
+              <small>Predicted spoilage risk</small>
+            </div>
+
+            <div className="risk-bar">
+              <div
+                className="risk-fill"
+                style={{ width: `${current.risk}%` }}
+              ></div>
+            </div>
+
+            <p className="risk-message">
+              {current.risk >= 75
+                ? "⚠ Conditions are outside the monitored safe range."
+                : current.risk >= 50
+                ? "⚠ Risk is increasing. Monitor the shipment closely."
+                : "✓ Conditions currently within monitored range."}
+            </p>
+          </div>
+
+          {/* SENSOR GRID */}
+          <div className="sensor-grid">
+
+            <div className="sensor-box">
+              <span className="sensor-icon">🌡</span>
+              <div>
+                <small>Temperature</small>
+                <strong>{current.temp}°C</strong>
+                <em>Cold-chain sensor</em>
+              </div>
+            </div>
+
+            <div className="sensor-box">
+              <span className="sensor-icon">💧</span>
+              <div>
+                <small>Humidity</small>
+                <strong>{current.humidity}%</strong>
+                <em>Environment sensor</em>
+              </div>
+            </div>
+
+            <div className="sensor-box">
+              <span className="sensor-icon">◷</span>
+              <div>
+                <small>Transit Time</small>
+                <strong>{31 + currentStep}h</strong>
+                <em>Shipment duration</em>
+              </div>
+            </div>
+
+          </div>
+
+          {/* BUTTONS */}
+          <div className="simulation-actions">
+
+            <button
+              className="primary-sim-button"
+              onClick={startSimulation}
+              disabled={running}
+            >
+              <span>{running ? "● Running..." : "▶ Start Simulation"}</span>
+            </button>
+
+            <button
+              className="secondary-sim-button"
+              onClick={resetSimulation}
+            >
+              ↻ Reset
+            </button>
+
+          </div>
+        </div>
+
+        {/* RIGHT - LIVE MONITOR */}
+        <div className="simulation-card monitor-card">
+
+          <div className="card-heading">
+            <div>
+              <span className="card-label">LIVE MONITOR</span>
+              <h2>Sensor Conditions</h2>
+            </div>
+
+            <div className="live-dot">
+              <span></span> LIVE
+            </div>
+          </div>
+
+          <div className="monitor-value">
+            <div className="big-temperature">
+              {current.temp}°
+              <span>C</span>
+            </div>
+
+            <div className="temperature-label">
+              Current temperature
+            </div>
+          </div>
+
+          <div className="mini-chart">
+            {steps.map((step, index) => (
+              <div className="chart-column" key={step.time}>
+                <div
+                  className={`chart-bar ${
+                    index <= currentStep ? "active" : ""
+                  }`}
+                  style={{
+                    height: `${Math.max(step.risk * 1.6, 30)}px`,
+                  }}
+                ></div>
+
+                <span>{step.time}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="monitor-footer">
+            <div>
+              <span>Humidity</span>
+              <strong>{current.humidity}%</strong>
+            </div>
+
+            <div>
+              <span>Transit</span>
+              <strong>{31 + currentStep}h</strong>
+            </div>
+
+            <div>
+              <span>Risk</span>
+              <strong>{current.risk}%</strong>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* RISK TIMELINE */}
+      <section className="timeline-card">
+
+        <div className="timeline-header">
+          <div>
+            <span className="card-label">RISK TIMELINE</span>
+            <h2>Risk Escalation</h2>
+          </div>
+
+          <span className="steps-count">
+            {currentStep + 1} / {steps.length} STEPS
+          </span>
+        </div>
+
+        <div className="timeline">
+
+          {steps.map((step, index) => (
+            <div
+              key={step.time}
+              className={`timeline-step ${
+                index <= currentStep ? "completed" : ""
+              } ${index === currentStep ? "current" : ""}`}
+            >
+              <div className="timeline-dot">
+                {index <= currentStep ? "✓" : index + 1}
+              </div>
+
+              <div className="timeline-info">
+                <strong>{step.time}</strong>
+                <span>{step.risk}% risk</span>
+              </div>
+            </div>
+          ))}
+
+        </div>
+
+      </section>
+
+      {/* FINAL ACTION */}
+      <section
+        className={`action-alert ${
+          current.risk >= 75 ? "critical" : ""
+        }`}
+      >
+
+        <div className="alert-icon">
+          {current.risk >= 75 ? "🚨" : "⚠"}
+        </div>
+
+        <div className="alert-content">
+          <span>AI RECOMMENDATION</span>
+
+          <h3>
+            {current.risk >= 75
+              ? "Prioritize delivery immediately"
+              : "Continue monitoring the shipment"}
+          </h3>
+
+          <p>
+            {current.risk >= 75
+              ? "FreshSense detected a critical spoilage-risk escalation in Batch B002."
+              : "The AI engine is continuously monitoring environmental conditions."}
+          </p>
+        </div>
+
+        {current.risk >= 75 && (
+          <button
+            className="prioritize-button"
+            onClick={() => navigate("/alerts")}
+          >
+            🚨 Prioritize Delivery →
+          </button>
+        )}
+
+      </section>
+
     </div>
   );
 }

@@ -1,210 +1,224 @@
-import React, { useEffect, useState } from "react";
-import { getAlerts } from "../services/api";
-
-const demoAlerts = [
-  {
-    id: "A001",
-    batchId: "B002",
-    level: "HIGH",
-    title: "High Spoilage Risk Detected",
-    message:
-      "Strawberry batch B002 has crossed the safe temperature range.",
-    riskScore: 78,
-    temperature: 8.4,
-    humidity: 91,
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: "A002",
-    batchId: "B005",
-    level: "HIGH",
-    title: "Elevated Risk Detected",
-    message:
-      "Mango batch B005 requires urgent attention to prevent further spoilage risk.",
-    riskScore: 68,
-    temperature: 7.9,
-    humidity: 89,
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: "A003",
-    batchId: "B004",
-    level: "MEDIUM",
-    title: "Temperature Fluctuation",
-    message:
-      "Temperature fluctuation detected in Tomato batch B004.",
-    riskScore: 56,
-    temperature: 6.7,
-    humidity: 86,
-    timestamp: new Date().toISOString(),
-  },
-];
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useApp } from "../App";
 
 function Alerts() {
-  const [alerts, setAlerts] = useState(demoAlerts);
+  const navigate = useNavigate();
+  const { batches, updateBatch } = useApp();
 
-  useEffect(() => {
-    getAlerts()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setAlerts(data);
-        }
-      })
-      .catch(() => {
-        // Keep demo alerts if API is unavailable
-        setAlerts(demoAlerts);
-      });
-  }, []);
+  // Automatically generate alerts from current batch risk
+  const alerts = batches
+    .filter((batch) => batch.risk >= 50)
+    .map((batch) => ({
+      ...batch,
+      severity: batch.risk >= 75 ? "CRITICAL" : "WARNING",
+      message:
+        batch.risk >= 75
+          ? "Spoilage risk has reached a critical level. Immediate delivery action is recommended."
+          : "Environmental conditions are causing the predicted spoilage risk to increase.",
+    }));
 
-  const getAlertClass = (level) => {
-    if (level === "HIGH") return "alert-card high";
-    if (level === "MEDIUM") return "alert-card medium";
-    return "alert-card";
-  };
+  const criticalCount = alerts.filter(
+    (alert) => alert.risk >= 75
+  ).length;
 
-  const getIcon = (level) => {
-    if (level === "HIGH") return "🔴";
-    if (level === "MEDIUM") return "🟠";
-    return "🟢";
+  const warningCount = alerts.filter(
+    (alert) => alert.risk < 75
+  ).length;
+
+  const handlePrioritize = (batchId) => {
+    updateBatch(batchId, {
+      status: "PRIORITIZED",
+    });
   };
 
   return (
     <div className="alerts-page">
-      <div className="alerts-container">
 
-        {/* Header */}
-        <div className="alerts-header">
+      {/* PAGE HEADER */}
+      <section className="alerts-header">
+        <div>
+          <div className="page-eyebrow">
+            WORKSPACE / ALERTS
+          </div>
+
+          <h1>Smart Alerts</h1>
+
+          <p>
+            Actionable warnings generated from monitored batch
+            conditions.
+          </p>
+        </div>
+
+        <div className="alert-system-status">
+          <span className="status-pulse"></span>
+          AI MONITORING ACTIVE
+        </div>
+      </section>
+
+      {/* SUMMARY CARDS */}
+      <section className="alert-summary-grid">
+
+        <div className="alert-summary-card">
+          <div className="summary-icon purple">!</div>
+
           <div>
-            <div className="page-eyebrow">LIVE MONITORING</div>
+            <span>ACTIVE ALERTS</span>
+            <strong>{alerts.length}</strong>
+            <small>Require attention</small>
+          </div>
+        </div>
 
-            <h1>🚨 System Alerts</h1>
+        <div className="alert-summary-card critical-summary">
+          <div className="summary-icon red">⚠</div>
 
+          <div>
+            <span>CRITICAL</span>
+            <strong>{criticalCount}</strong>
+            <small>Immediate action</small>
+          </div>
+        </div>
+
+        <div className="alert-summary-card">
+          <div className="summary-icon yellow">◉</div>
+
+          <div>
+            <span>WARNING</span>
+            <strong>{warningCount}</strong>
+            <small>Monitor closely</small>
+          </div>
+        </div>
+
+        <div className="alert-summary-card">
+          <div className="summary-icon green">✓</div>
+
+          <div>
+            <span>SYSTEM STATUS</span>
+            <strong>LIVE</strong>
+            <small>All sensors connected</small>
+          </div>
+        </div>
+
+      </section>
+
+      {/* MAIN ALERT AREA */}
+      <section className="alerts-main-card">
+
+        <div className="alerts-card-header">
+          <div>
+            <span className="card-label">REAL-TIME FEED</span>
+            <h2>Current Risk Alerts</h2>
+          </div>
+
+          <span className="live-indicator">
+            <i></i>
+            LIVE
+          </span>
+        </div>
+
+        {alerts.length === 0 ? (
+          <div className="no-alerts">
+            <div className="no-alert-icon">✓</div>
+            <h3>No active alerts</h3>
             <p>
-              Real-time warnings from FreshSense cold-chain monitoring
+              All monitored batches are currently within the
+              acceptable risk range.
             </p>
           </div>
-
-          <div className="active-alert-count">
-            <span>{alerts.length}</span>
-            <small>Active Alerts</small>
-          </div>
-        </div>
-
-        {/* Alert Summary */}
-        <div className="alert-summary">
-
-          <div className="alert-summary-card">
-            <span className="summary-icon">🚨</span>
-            <div>
-              <strong>
-                {alerts.filter((a) => a.level === "HIGH").length}
-              </strong>
-              <span>High Risk</span>
-            </div>
-          </div>
-
-          <div className="alert-summary-card">
-            <span className="summary-icon">⚠️</span>
-            <div>
-              <strong>
-                {alerts.filter((a) => a.level === "MEDIUM").length}
-              </strong>
-              <span>Medium Risk</span>
-            </div>
-          </div>
-
-          <div className="alert-summary-card">
-            <span className="summary-icon">📦</span>
-            <div>
-              <strong>
-                {new Set(alerts.map((a) => a.batchId)).size}
-              </strong>
-              <span>Affected Batches</span>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Alerts */}
-        <div className="alerts-section">
-
-          <div className="section-title">
-            <div>
-              <h2>Active Alerts</h2>
-              <p>Immediate attention may be required</p>
-            </div>
-
-            <span className="live-indicator">
-              <span></span> LIVE
-            </span>
-          </div>
-
+        ) : (
           <div className="alerts-list">
 
             {alerts.map((alert) => (
               <div
-                key={alert.id}
-                className={getAlertClass(alert.level)}
+                className={`alert-item ${
+                  alert.severity === "CRITICAL"
+                    ? "critical-alert"
+                    : "warning-alert"
+                }`}
+                key={alert.batchId}
               >
 
-                <div className="alert-icon">
-                  {getIcon(alert.level)}
+                {/* ALERT ICON */}
+                <div className="alert-item-icon">
+                  {alert.severity === "CRITICAL"
+                    ? "🚨"
+                    : "⚠️"}
                 </div>
 
-                <div className="alert-content">
+                {/* ALERT CONTENT */}
+                <div className="alert-item-content">
 
-                  <div className="alert-top">
+                  <div className="alert-title-row">
                     <div>
-                      <span className="alert-level">
-                        {alert.level} RISK
+                      <span
+                        className={`severity-tag ${
+                          alert.severity === "CRITICAL"
+                            ? "critical-tag"
+                            : "warning-tag"
+                        }`}
+                      >
+                        {alert.severity}
                       </span>
 
-                      <h3>{alert.title}</h3>
+                      <h3>
+                        {alert.product} · Batch {alert.batchId}
+                      </h3>
                     </div>
 
-                    <span className="alert-batch">
-                      {alert.batchId}
-                    </span>
+                    <div className="alert-risk">
+                      <strong>{alert.risk}%</strong>
+                      <span>risk</span>
+                    </div>
                   </div>
 
                   <p className="alert-message">
                     {alert.message}
                   </p>
 
-                  <div className="alert-metrics">
+                  {/* SENSOR VALUES */}
+                  <div className="alert-sensors">
 
                     <div>
-                      <span>Risk Score</span>
-                      <strong>{alert.riskScore}%</strong>
-                    </div>
-
-                    <div>
-                      <span>Temperature</span>
+                      <span>🌡 Temperature</span>
                       <strong>{alert.temperature}°C</strong>
                     </div>
 
                     <div>
-                      <span>Humidity</span>
+                      <span>💧 Humidity</span>
                       <strong>{alert.humidity}%</strong>
                     </div>
 
                     <div>
-                      <span>Detected</span>
-                      <strong>
-                        {new Date(alert.timestamp).toLocaleTimeString()}
-                      </strong>
+                      <span>◷ Transit</span>
+                      <strong>{alert.transitTime}h</strong>
                     </div>
 
                   </div>
 
+                </div>
+
+                {/* ACTIONS */}
+                <div className="alert-actions">
+
                   <button
-                    className="alert-action"
+                    className="view-batch-button"
                     onClick={() =>
-                      (window.location.href = `/batch/${alert.batchId}`)
+                      navigate(`/batch/${alert.batchId}`)
                     }
                   >
-                    View Batch →
+                    View Batch
                   </button>
+
+                  {alert.risk >= 75 && (
+                    <button
+                      className="prioritize-alert-button"
+                      onClick={() =>
+                        handlePrioritize(alert.batchId)
+                      }
+                    >
+                      🚨 Prioritize
+                    </button>
+                  )}
 
                 </div>
 
@@ -212,9 +226,43 @@ function Alerts() {
             ))}
 
           </div>
+        )}
+
+      </section>
+
+      {/* AI INSIGHT */}
+      <section className="ai-alert-insight">
+
+        <div className="ai-insight-icon">✦</div>
+
+        <div>
+          <span>FRESHSENSE AI INSIGHT</span>
+
+          <h3>
+            {criticalCount > 0
+              ? "Immediate intervention recommended"
+              : "Cold-chain conditions are stable"}
+          </h3>
+
+          <p>
+            {criticalCount > 0
+              ? `${criticalCount} batch${
+                  criticalCount > 1 ? "es are" : " is"
+                } currently above the critical risk threshold. Prioritize
+                delivery to minimize potential spoilage loss.`
+              : "The AI risk engine is continuously evaluating temperature, humidity and transit conditions."}
+          </p>
         </div>
 
-      </div>
+        <button
+          className="simulation-link-button"
+          onClick={() => navigate("/simulation")}
+        >
+          Open Simulation →
+        </button>
+
+      </section>
+
     </div>
   );
 }

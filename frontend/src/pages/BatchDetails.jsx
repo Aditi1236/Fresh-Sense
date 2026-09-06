@@ -1,258 +1,349 @@
-import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { getBatch, updateBatch } from '../services/api'
-import RiskBadge from '../components/RiskBadge'
-import JourneyTimeline from '../components/JourneyTimeline'
-import TempLineChart from '../charts/TempLineChart'
+import React from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useApp } from "../App";
 
-const FACTOR_COLORS = {
-  LOW:    'bg-green-500/15 text-green-400 border-green-500/30',
-  MEDIUM: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  HIGH:   'bg-red-500/15 text-red-400 border-red-500/30',
-}
+function BatchDetails() {
+  const { batchId } = useParams();
+  const navigate = useNavigate();
+  const { batches } = useApp();
 
-function FactorBadge({ level }) {
-  return (
-    <span className={`text-xs px-2 py-1 rounded-full border font-medium ${FACTOR_COLORS[level] || FACTOR_COLORS.LOW}`}>
-      {level}
-    </span>
-  )
-}
+  const batch = batches.find((item) => item.batchId === batchId);
 
-function getStageFromLocation(location = '') {
-  const l = location.toLowerCase()
-  if (l.includes('farm')) return 0
-  if (l.includes('cold storage')) return 1
-  if (l.includes('truck') || l.includes('highway') || l.includes('transit')) return 2
-  if (l.includes('market') || l.includes('distribution') || l.includes('chandigarh')) return 3
-  return 1
-}
-
-function computeFactors(batch) {
-  const tempDev = Math.abs(batch.temperature - 4) // rough deviation from safe center
-  return {
-    temperature: tempDev > 4 ? 'HIGH' : tempDev > 2 ? 'MEDIUM' : 'LOW',
-    humidity:    batch.humidity > 92 ? 'HIGH' : batch.humidity > 85 ? 'MEDIUM' : 'LOW',
-    transit:     batch.transitTime > 20 ? 'HIGH' : batch.transitTime > 12 ? 'MEDIUM' : 'LOW',
-  }
-}
-
-function buildReason(batch, factors) {
-  const parts = []
-  if (factors.temperature !== 'LOW') {
-    parts.push(`the temperature (${batch.temperature}°C) deviates from the safe range`)
-  }
-  if (factors.humidity !== 'LOW') {
-    parts.push(`humidity (${batch.humidity}%) is outside the optimal level`)
-  }
-  if (factors.transit !== 'LOW') {
-    parts.push(`the transit duration of ${batch.transitTime}h increases cumulative exposure`)
-  }
-  if (parts.length === 0) {
-    return `The estimated risk is ${batch.riskLevel} (${batch.riskScore}%). All parameters are within acceptable ranges, but continued monitoring is advised.`
-  }
-  return `The estimated risk is ${batch.riskLevel} (${batch.riskScore}%) because ${parts.join(', and ')}. This is an estimate based on current sensor data — actual spoilage may vary.`
-}
-
-export default function BatchDetails() {
-  const { batchId } = useParams()
-  const navigate = useNavigate()
-  const [batch, setBatch] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [prioritized, setPrioritized] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    getBatch(batchId)
-      .then((res) => {
-        setBatch(res.data)
-        if (res.data.priority === 'URGENT') setPrioritized(true)
-      })
-      .catch(() => setBatch(null))
-      .finally(() => setLoading(false))
-  }, [batchId])
-
-  const handlePrioritize = async () => {
-    setSaving(true)
-    try {
-      const res = await updateBatch(batchId, { priority: 'URGENT' })
-      setBatch(res.data)
-      setPrioritized(true)
-    } catch {
-      alert('Failed to update priority. Check backend.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading batch...</div>
-  }
   if (!batch) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-400">
-        Batch {batchId} not found.
+      <div className="batch-not-found">
+        <div className="not-found-icon">!</div>
+        <h1>Batch not found</h1>
+        <p>The requested shipment could not be found.</p>
+
+        <button
+          className="back-batches-button"
+          onClick={() => navigate("/batches")}
+        >
+          ← Back to Batches
+        </button>
       </div>
-    )
+    );
   }
 
-  const factors = computeFactors(batch)
-  const reason  = buildReason(batch, factors)
-  const stage   = getStageFromLocation(batch.location)
-  const eta     = Math.max(0, 36 - batch.transitTime)
-  const isHighRisk = batch.riskLevel === 'HIGH' || batch.riskLevel === 'CRITICAL'
+  const risk = Number(batch.risk) || 0;
+
+  const riskLevel =
+    risk >= 75 ? "CRITICAL" : risk >= 50 ? "MEDIUM" : "SAFE";
+
+  const riskClass =
+    risk >= 75 ? "critical" : risk >= 50 ? "medium" : "safe";
+
+  const riskMessage =
+    risk >= 75
+      ? "Immediate delivery action is recommended. FreshSense has detected a critical spoilage-risk escalation."
+      : risk >= 50
+      ? "Environmental conditions require attention. Continue monitoring this shipment closely."
+      : "Conditions are currently within the monitored safe operating range.";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Back */}
-      <button
-        onClick={() => navigate('/dashboard')}
-        className="flex items-center gap-2 text-slate-400 hover:text-white transition text-sm mb-6"
-      >
-        ← Back to Dashboard
-      </button>
+    <div className="batch-details-page">
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-4 mb-8">
+      {/* TOP HEADER */}
+      <section className="batch-details-header">
+
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl font-extrabold text-white">{batch.product}</h1>
-            <RiskBadge level={batch.riskLevel} size="lg" />
-            {batch.priority === 'URGENT' && (
-              <span className="text-sm bg-red-600/20 text-red-400 border border-red-600/30 rounded-full px-3 py-1 font-semibold">
-                🔴 URGENT
-              </span>
-            )}
+          <button
+            className="back-button"
+            onClick={() => navigate("/alerts")}
+          >
+            ← Back to Alerts
+          </button>
+
+          <div className="details-eyebrow">
+            SHIPMENT / BATCH DETAILS
           </div>
-          <p className="text-slate-400">Batch ID: <span className="font-mono text-white">{batch.batchId}</span></p>
-        </div>
-        <div className="ml-auto text-right">
-          <p className="text-4xl font-extrabold" style={{
-            color: batch.riskScore > 60 ? '#ef4444' : batch.riskScore > 30 ? '#f59e0b' : '#16a34a'
-          }}>
-            {batch.riskScore}%
+
+          <h1>
+            <span className="product-emoji">🍓</span>
+            {batch.product}
+            <span className="batch-separator">•</span>
+            {batch.batchId}
+          </h1>
+
+          <p>
+            Live condition analysis for this cold-chain shipment.
           </p>
-          <p className="text-slate-400 text-sm">Estimated Spoilage Risk</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Info Grid */}
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">📊 Batch Information</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: 'Temperature', value: `${batch.temperature}°C`, icon: '🌡️' },
-              { label: 'Humidity',    value: `${batch.humidity}%`,     icon: '💧' },
-              { label: 'Transit Time', value: `${batch.transitTime}h`, icon: '⏱️' },
-              { label: 'Location',    value: batch.location,           icon: '📍' },
-            ].map(({ label, value, icon }) => (
-              <div key={label} className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-1">{icon} {label}</p>
-                <p className="text-sm font-semibold text-white">{value}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* Risk Factor Breakdown */}
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">🔍 Risk Factor Breakdown</h3>
-          <div className="space-y-3">
-            {[
-              { label: 'Temperature Deviation', level: factors.temperature, desc: `Current: ${batch.temperature}°C` },
-              { label: 'Humidity Level',         level: factors.humidity,    desc: `Current: ${batch.humidity}%` },
-              { label: 'Transit Duration',        level: factors.transit,     desc: `Duration: ${batch.transitTime}h` },
-            ].map(({ label, level, desc }) => (
-              <div key={label} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
-                <div>
-                  <p className="text-sm text-white font-medium">{label}</p>
-                  <p className="text-xs text-slate-500">{desc}</p>
-                </div>
-                <FactorBadge level={level} />
-              </div>
-            ))}
-          </div>
-          {/* Plain-language reason */}
-          <div className="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-700/30">
-            <p className="text-xs text-slate-400 leading-relaxed">💡 {reason}</p>
-          </div>
+        <div className={`details-status ${riskClass}`}>
+          <span></span>
+          {riskLevel}
         </div>
-      </div>
 
-      {/* Save the Batch Panel */}
-      {isHighRisk && (
-        <div className="bg-red-900/10 border border-red-700/40 rounded-xl p-6 mb-6">
-          <div className="flex items-start gap-4">
-            <div className="text-3xl">🚨</div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-red-400 mb-1">Save the Batch</h3>
-              <p className="text-slate-300 text-sm mb-1">
-                Estimated Spoilage Risk: <span className="text-red-400 font-bold">{batch.riskScore}%</span>
+      </section>
+
+      {/* OVERVIEW GRID */}
+      <section className="batch-overview-grid">
+
+        {/* RISK CARD */}
+        <div className="details-card risk-overview-card">
+
+          <div className="details-card-label">
+            AI SPOILAGE PREDICTION
+          </div>
+
+          <div className="risk-display">
+
+            <div className={`risk-circle ${riskClass}`}>
+              <strong>{risk}%</strong>
+              <span>RISK</span>
+            </div>
+
+            <div className="risk-display-info">
+              <h2>
+                {riskLevel === "CRITICAL"
+                  ? "Critical spoilage risk"
+                  : riskLevel === "MEDIUM"
+                  ? "Elevated spoilage risk"
+                  : "Low spoilage risk"}
+              </h2>
+
+              <p>
+                Current estimated spoilage risk based on
+                monitored conditions.
               </p>
-              <p className="text-slate-400 text-sm mb-4">
-                This batch has a <strong>{batch.riskLevel}</strong> estimated risk. Prioritizing delivery can reduce further exposure.
-              </p>
-              {prioritized ? (
-                <div className="flex items-center gap-2 text-green-400 bg-green-900/20 border border-green-700/30 rounded-lg px-4 py-3">
-                  <span>✅</span>
-                  <span className="font-semibold">Batch added to priority delivery list. Status: 🔴 URGENT</span>
-                </div>
-              ) : (
-                <button
-                  onClick={handlePrioritize}
-                  disabled={saving}
-                  className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg shadow-red-900/30"
-                >
-                  {saving ? '⏳ Updating...' : '🚀 PRIORITIZE DELIVERY'}
-                </button>
-              )}
+            </div>
+
+          </div>
+
+          <div className="large-risk-bar">
+            <div
+              className={`large-risk-fill ${riskClass}`}
+              style={{ width: `${risk}%` }}
+            ></div>
+          </div>
+
+        </div>
+
+        {/* STATUS CARD */}
+        <div className={`details-card condition-card ${riskClass}`}>
+
+          <div className="condition-icon">
+            {risk >= 75 ? "🚨" : risk >= 50 ? "⚠️" : "✓"}
+          </div>
+
+          <div>
+            <span>AI STATUS</span>
+
+            <h3>{riskMessage}</h3>
+
+            <p>
+              Last evaluated from live sensor readings.
+            </p>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* SENSOR READINGS */}
+      <section className="details-card sensor-readings-card">
+
+        <div className="section-heading">
+
+          <div>
+            <div className="details-card-label">
+              SENSOR READINGS
+            </div>
+
+            <h2>Current Conditions</h2>
+          </div>
+
+          <div className="live-badge">
+            <span></span>
+            LIVE
+          </div>
+
+        </div>
+
+        <div className="details-sensor-grid">
+
+          <div className="details-sensor">
+            <div className="details-sensor-icon temperature">
+              🌡
+            </div>
+
+            <div>
+              <span>Temperature</span>
+              <strong>{batch.temperature}°C</strong>
+              <small>Current reading</small>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Temperature Chart */}
-      {batch.tempHistory && batch.tempHistory.length > 0 && (
-        <div className="mb-6">
-          <TempLineChart data={batch.tempHistory} />
-        </div>
-      )}
+          <div className="details-sensor">
+            <div className="details-sensor-icon humidity">
+              💧
+            </div>
 
-      {/* Journey Timeline */}
-      <div className="mb-6">
-        <JourneyTimeline currentStage={stage} eta={eta} />
-      </div>
+            <div>
+              <span>Humidity</span>
+              <strong>{batch.humidity}%</strong>
+              <small>Current reading</small>
+            </div>
+          </div>
 
-      {/* Simulated Route Map */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">🗺️ Simulated Route</h3>
-        <div className="flex items-center gap-2 text-sm flex-wrap">
-          {[
-            { label: '🌾 Ludhiana Farm', dist: '12 km →' },
-            { label: '🏭 Cold Storage',  dist: '45 km →' },
-            { label: '🚚 NH1 Highway',   dist: '38 km →' },
-            { label: '🏪 Market',        dist: null },
-          ].map(({ label, dist }, i) => (
-            <React.Fragment key={i}>
-              <div className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                i === stage
-                  ? 'bg-green-600/20 border border-green-600/40 text-green-300'
-                  : i < stage
-                  ? 'bg-slate-700/30 text-slate-400 border border-slate-700/30'
-                  : 'bg-slate-800/30 text-slate-600 border border-slate-800/30'
-              }`}>
-                {label}
-                {i === stage && <span className="ml-2 text-xs bg-green-600 text-white px-1.5 py-0.5 rounded">HERE</span>}
-              </div>
-              {dist && <span className="text-slate-600 text-xs">{dist}</span>}
-            </React.Fragment>
-          ))}
+          <div className="details-sensor">
+            <div className="details-sensor-icon transit">
+              ◷
+            </div>
+
+            <div>
+              <span>Transit Time</span>
+              <strong>{batch.transitTime}h</strong>
+              <small>Since dispatch</small>
+            </div>
+          </div>
+
+          <div className="details-sensor">
+            <div className="details-sensor-icon location">
+              📍
+            </div>
+
+            <div>
+              <span>Location</span>
+              <strong>In Transit</strong>
+              <small>Last known location</small>
+            </div>
+          </div>
+
         </div>
-        <p className="text-xs text-slate-500 mt-3">
-          Total route: Ludhiana → Chandigarh &nbsp;|&nbsp; Est. distance: ~95 km &nbsp;|&nbsp; ETA: ~{eta}h
-        </p>
-      </div>
+
+      </section>
+
+      {/* JOURNEY TIMELINE */}
+      <section className="details-card journey-card">
+
+        <div className="section-heading">
+
+          <div>
+            <div className="details-card-label">
+              SUPPLY CHAIN TRACE
+            </div>
+
+            <h2>Journey Timeline</h2>
+          </div>
+
+          <span className="journey-live">
+            ● Tracking active
+          </span>
+
+        </div>
+
+        <div className="journey-timeline">
+
+          <div className="journey-line"></div>
+
+          <div className="journey-step completed">
+            <div className="journey-dot">
+              🌱
+            </div>
+
+            <div className="journey-content">
+              <span>08:00 AM</span>
+              <h3>Farm Origin</h3>
+              <p>Shipment confirmed</p>
+            </div>
+          </div>
+
+          <div className="journey-step completed">
+            <div className="journey-dot">
+              ❄️
+            </div>
+
+            <div className="journey-content">
+              <span>09:30 AM</span>
+              <h3>Cold Storage</h3>
+              <p>Conditions monitored</p>
+            </div>
+          </div>
+
+          <div className="journey-step completed">
+            <div className="journey-dot">
+              🚚
+            </div>
+
+            <div className="journey-content">
+              <span>10:00 AM</span>
+              <h3>Transport</h3>
+              <p>Shipment in transit</p>
+            </div>
+          </div>
+
+          <div className="journey-step current">
+            <div className="journey-dot">
+              📦
+            </div>
+
+            <div className="journey-content">
+              <span>NOW</span>
+              <h3>Market</h3>
+              <p>Awaiting arrival</p>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* ACTION AREA */}
+      <section className="batch-action-panel">
+
+        <div className="batch-action-text">
+
+          <div className="action-spark">✦</div>
+
+          <div>
+            <span>FRESHSENSE AI RECOMMENDATION</span>
+
+            <h2>
+              {risk >= 75
+                ? "Prioritize this shipment"
+                : risk >= 50
+                ? "Monitor this shipment closely"
+                : "Shipment is currently stable"}
+            </h2>
+
+            <p>
+              {risk >= 75
+                ? "Critical risk detected. Accelerate delivery to reduce potential spoilage loss."
+                : risk >= 50
+                ? "Risk is elevated. Keep monitoring environmental conditions."
+                : "No immediate intervention is required."}
+            </p>
+          </div>
+
+        </div>
+
+        <div className="batch-action-buttons">
+
+          <button
+            className="simulation-button"
+            onClick={() => navigate("/simulation")}
+          >
+            ◉ Live Simulation
+          </button>
+
+          {risk >= 75 && (
+            <button
+              className="delivery-button"
+              onClick={() => navigate("/alerts")}
+            >
+              🚨 Prioritize Delivery
+            </button>
+          )}
+
+        </div>
+
+      </section>
+
     </div>
-  )
+  );
 }
+
+export default BatchDetails;

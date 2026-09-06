@@ -1,1079 +1,716 @@
-import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getBatches } from "../services/api";
+import { useApp } from "../App";
 
-const demoBatches = [
-  {
-    batchId: "B001",
-    product: "Apple",
-    temperature: 4.2,
-    humidity: 82,
-    transitTime: 12,
-    location: "Punjab",
-    riskScore: 18,
-    riskLevel: "SAFE",
-  },
-  {
-    batchId: "B002",
-    product: "Strawberry",
-    temperature: 8.4,
-    humidity: 91,
-    transitTime: 18,
-    location: "Chandigarh",
-    riskScore: 78,
-    riskLevel: "HIGH",
-  },
-  {
-    batchId: "B003",
-    product: "Milk",
-    temperature: 3.8,
-    humidity: 75,
-    transitTime: 8,
-    location: "Ludhiana",
-    riskScore: 24,
-    riskLevel: "SAFE",
-  },
-  {
-    batchId: "B004",
-    product: "Tomato",
-    temperature: 6.7,
-    humidity: 86,
-    transitTime: 15,
-    location: "Amritsar",
-    riskScore: 56,
-    riskLevel: "MEDIUM",
-  },
-  {
-    batchId: "B005",
-    product: "Mango",
-    temperature: 7.9,
-    humidity: 89,
-    transitTime: 20,
-    location: "Delhi",
-    riskScore: 68,
-    riskLevel: "HIGH",
-  },
-];
+function Dashboard() {
 
-function getStatusClass(level) {
-  if (level === "SAFE") return "safe";
-  if (level === "MEDIUM") return "medium";
-  return "high";
-}
-
-function getProductIcon(product) {
-  const icons = {
-    Strawberry: "🍓",
-    Apple: "🍎",
-    Milk: "🥛",
-    Tomato: "🍅",
-    Mango: "🥭",
-  };
-
-  return icons[product] || "📦";
-}
-
-function MiniSparkline({ type = "blue" }) {
-  return (
-    <svg className={`mini-sparkline ${type}`} viewBox="0 0 130 45">
-      <polyline
-        points="0,34 15,27 28,31 42,16 55,22 68,11 82,20 96,8 110,16 130,5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-function RiskGauge({ value }) {
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const progress = circumference - (value / 100) * circumference;
-
-  return (
-    <div className="risk-gauge">
-      <svg viewBox="0 0 180 180">
-        <circle
-          cx="90"
-          cy="90"
-          r={radius}
-          className="gauge-bg"
-        />
-
-        <circle
-          cx="90"
-          cy="90"
-          r={radius}
-          className="gauge-progress"
-          strokeDasharray={circumference}
-          strokeDashoffset={progress}
-        />
-      </svg>
-
-      <div className="gauge-content">
-        <strong>{value}%</strong>
-        <span>Risk Score</span>
-      </div>
-    </div>
-  );
-}
-
-function TemperatureChart({ batch }) {
-  const points = batch?.tempHistory?.length
-    ? batch.tempHistory
-    : [4.5, 4.8, 5.1, 5.7, 6.2, 7.1, 8.4];
-
-  const max = Math.max(...points, 10);
-  const min = Math.min(...points, 0);
-
-  const chartPoints = points
-    .map((temp, index) => {
-      const x = (index / (points.length - 1 || 1)) * 620;
-      const y = 210 - ((temp - min) / (max - min || 1)) * 160;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg className="temperature-chart" viewBox="0 0 650 250">
-      <defs>
-        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-
-      <line x1="0" y1="210" x2="620" y2="210" className="chart-grid" />
-      <line x1="0" y1="130" x2="620" y2="130" className="chart-grid" />
-      <line x1="0" y1="50" x2="620" y2="50" className="chart-grid" />
-
-      <polyline
-        points={`0,210 ${chartPoints} 620,210`}
-        fill="url(#areaGradient)"
-        stroke="none"
-      />
-
-      <polyline
-        points={chartPoints}
-        fill="none"
-        stroke="#22d3ee"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {points.map((temp, index) => {
-        const x = (index / (points.length - 1 || 1)) * 620;
-        const y = 210 - ((temp - min) / (max - min || 1)) * 160;
-
-        return (
-          <circle
-            key={index}
-            cx={x}
-            cy={y}
-            r="4"
-            className="chart-dot"
-          />
-        );
-      })}
-    </svg>
-  );
-}
-
-export default function Dashboard() {
   const navigate = useNavigate();
 
-  const [batches, setBatches] = useState(demoBatches);
-  const [activeNav, setActiveNav] = useState("dashboard");
+  const { batches } = useApp();
 
-  useEffect(() => {
-    getBatches()
-      .then((res) => {
-        const data = res?.data;
 
-        const apiBatches = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.batches)
-          ? data.batches
-          : [];
+  const highRisk = batches.filter(
+    (batch) => batch.risk >= 70
+  ).length;
 
-        if (apiBatches.length > 0) {
-          setBatches(apiBatches);
-        }
-      })
-      .catch(() => {
-        // Demo data remains visible if API is unavailable.
-      });
-  }, []);
 
-  const stats = useMemo(() => {
-    const safe = batches.filter(
-      (b) => b.riskLevel === "SAFE"
-    ).length;
+  const mediumRisk = batches.filter(
+    (batch) =>
+      batch.risk >= 40 &&
+      batch.risk < 70
+  ).length;
 
-    const medium = batches.filter(
-      (b) => b.riskLevel === "MEDIUM"
-    ).length;
 
-    const critical = batches.filter(
-      (b) =>
-        b.riskLevel === "HIGH" ||
-        b.riskLevel === "CRITICAL"
-    ).length;
+  const safeBatches = batches.filter(
+    (batch) => batch.risk < 40
+  ).length;
 
-    return {
-      total: batches.length,
-      safe,
-      medium,
-      critical,
-    };
-  }, [batches]);
 
-  const highestRiskBatch = [...batches].sort(
-    (a, b) => (b.riskScore || 0) - (a.riskScore || 0)
-  )[0];
+  const averageRisk = Math.round(
+    batches.reduce(
+      (sum, batch) => sum + batch.risk,
+      0
+    ) / batches.length
+  );
 
-  const b002 =
-    batches.find((b) => b.batchId === "B002") ||
-    highestRiskBatch ||
-    demoBatches[1];
-
-  const alerts = [
-    {
-      id: 1,
-      type: "critical",
-      icon: "🚨",
-      title: "High Spoilage Risk",
-      batch: "B002",
-      text: "Temperature has exceeded the recommended monitoring range.",
-      risk: 78,
-    },
-    {
-      id: 2,
-      type: "warning",
-      icon: "⚠",
-      title: "Elevated Risk Detected",
-      batch: "B005",
-      text: "Environmental conditions indicate increasing spoilage risk.",
-      risk: 68,
-    },
-    {
-      id: 3,
-      type: "info",
-      icon: "🌡",
-      title: "Temperature Fluctuation",
-      batch: "B004",
-      text: "Temperature is above the preferred storage condition.",
-      risk: 56,
-    },
-  ];
-
-  const handleNavigation = (page) => {
-    setActiveNav(page);
-
-    if (page === "alerts") {
-      navigate("/alerts");
-    } else if (page === "batches") {
-      navigate("/batches");
-    } else if (page === "analytics") {
-      navigate("/analytics");
-    }
-  };
 
   return (
-    <div className="freshsense-app">
 
-      {/* Ambient background */}
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-      <div className="ambient ambient-three" />
+    <main className="dashboard-page">
 
-      {/* ================= SIDEBAR ================= */}
 
-      <aside className="sidebar">
+      {/* ============================================
+          HEADER
+      ============================================ */}
 
-        <div className="brand">
-          <div className="brand-logo">🌿</div>
+      <div className="page-header">
 
-          <div>
-            <h1>
-              Fresh<span>Sense</span>
-            </h1>
+        <div>
 
-            <p>Smart Cold-Chain</p>
-          </div>
-        </div>
-
-        <div className="sidebar-label">
-          WORKSPACE
-        </div>
-
-        <nav className="sidebar-nav">
-
-          <button
-            className={`nav-item ${
-              activeNav === "dashboard" ? "active" : ""
-            }`}
-            onClick={() => setActiveNav("dashboard")}
-          >
-            <span className="nav-icon">▦</span>
-            Dashboard
-          </button>
-
-          <button
-            className={`nav-item ${
-              activeNav === "batches" ? "active" : ""
-            }`}
-            onClick={() => handleNavigation("batches")}
-          >
-            <span className="nav-icon">◈</span>
-            Batches
-          </button>
-
-          <button
-            className={`nav-item ${
-              activeNav === "alerts" ? "active" : ""
-            }`}
-            onClick={() => handleNavigation("alerts")}
-          >
-            <span className="nav-icon">♢</span>
-            Alerts
-            <span className="nav-count">3</span>
-          </button>
-
-          <button
-            className={`nav-item ${
-              activeNav === "analytics" ? "active" : ""
-            }`}
-            onClick={() => handleNavigation("analytics")}
-          >
-            <span className="nav-icon">⌁</span>
-            Analytics
-          </button>
-
-        </nav>
-
-        <div className="sidebar-label">
-          SYSTEM
-        </div>
-
-        <nav className="sidebar-nav">
-
-          <button className="nav-item">
-            <span className="nav-icon">⌁</span>
-            Live Monitoring
-            <span className="live-dot" />
-          </button>
-
-          <button className="nav-item">
-            <span className="nav-icon">⚙</span>
-            Settings
-          </button>
-
-        </nav>
-
-        <div className="sidebar-bottom">
-
-          <div className="upgrade-card">
-
-            <div className="upgrade-orb">
-              ✦
-            </div>
-
-            <h3>Predict smarter</h3>
-
-            <p>
-              AI-powered insights for every batch.
-            </p>
-
-            <button>
-              Explore Insights →
-            </button>
-
+          <div className="eyebrow">
+            COLD-CHAIN OVERVIEW
           </div>
 
-          <div className="user-card">
+          <h1>
+            Good afternoon, <span>Demo User</span>
+          </h1>
 
-            <div className="avatar">
-              FS
-            </div>
-
-            <div className="user-info">
-              <strong>FreshSense Admin</strong>
-              <span>Monitoring System</span>
-            </div>
-
-            <span className="more">•••</span>
-
-          </div>
+          <p>
+            Monitor your perishable inventory and
+            respond to emerging spoilage risks.
+          </p>
 
         </div>
 
-      </aside>
 
-      {/* ================= MAIN ================= */}
+        <button
+          className="primary-button"
+          onClick={() => navigate("/simulation")}
+        >
+          <span>◉</span>
+          Run Live Simulation
+        </button>
 
-      <main className="main-content">
+      </div>
 
-        {/* TOP BAR */}
 
-        <header className="topbar">
 
-          <div className="search-box">
-            <span>⌕</span>
-            <input
-              placeholder="Search batches, products, locations..."
-            />
-            <kbd>⌘ K</kbd>
-          </div>
+      {/* ============================================
+          KPI CARDS
+      ============================================ */}
 
-          <div className="top-actions">
+      <section className="kpi-grid">
 
-            <button className="top-icon">
-              ⌁
-            </button>
 
-            <button
-              className="notification"
-              onClick={() => navigate("/alerts")}
-            >
-              ♢
-              <span>3</span>
-            </button>
+        <div className="kpi-card">
 
-            <div className="profile">
-              <div className="profile-avatar">
-                FS
-              </div>
+          <div className="kpi-top">
 
-              <div>
-                <strong>FreshSense</strong>
-                <span>Admin</span>
-              </div>
+            <span>
+              ACTIVE BATCHES
+            </span>
 
-              <span>⌄</span>
+            <div className="kpi-icon blue">
+              ▤
             </div>
 
           </div>
 
-        </header>
+          <div className="kpi-value">
+            {batches.length}
+          </div>
 
-        {/* PAGE CONTENT */}
+          <div className="kpi-bottom">
+            <span className="positive">
+              ● Live
+            </span>
+            <span>
+              monitored batches
+            </span>
+          </div>
 
-        <div className="dashboard-content">
+        </div>
 
-          {/* WELCOME */}
 
-          <section className="welcome-section">
+        <div className="kpi-card">
+
+          <div className="kpi-top">
+
+            <span>
+              SAFE BATCHES
+            </span>
+
+            <div className="kpi-icon green">
+              ✓
+            </div>
+
+          </div>
+
+          <div className="kpi-value">
+            {safeBatches}
+          </div>
+
+          <div className="kpi-bottom">
+            <span className="positive">
+              Low risk
+            </span>
+            <span>
+              currently
+            </span>
+          </div>
+
+        </div>
+
+
+        <div className="kpi-card">
+
+          <div className="kpi-top">
+
+            <span>
+              NEEDS ATTENTION
+            </span>
+
+            <div className="kpi-icon orange">
+              !
+            </div>
+
+          </div>
+
+          <div className="kpi-value">
+            {mediumRisk}
+          </div>
+
+          <div className="kpi-bottom">
+            <span className="warning">
+              Medium risk
+            </span>
+            <span>
+              batches
+            </span>
+          </div>
+
+        </div>
+
+
+        <div className="kpi-card">
+
+          <div className="kpi-top">
+
+            <span>
+              HIGH RISK
+            </span>
+
+            <div className="kpi-icon red">
+              !
+            </div>
+
+          </div>
+
+          <div className="kpi-value">
+            {highRisk}
+          </div>
+
+          <div className="kpi-bottom">
+            <span className="danger">
+              Immediate action
+            </span>
+          </div>
+
+        </div>
+
+
+      </section>
+
+
+
+      {/* ============================================
+          MAIN GRID
+      ============================================ */}
+
+      <section className="dashboard-grid">
+
+
+        {/* TEMPERATURE PANEL */}
+
+        <div className="dashboard-panel">
+
+          <div className="panel-header">
 
             <div>
-              <div className="eyebrow">
-                <span className="status-pulse" />
-                SYSTEM OPERATIONAL
+
+              <div className="panel-label">
+                SENSOR NETWORK
               </div>
 
               <h2>
-                Good afternoon,
-                <span> FreshSense.</span>
+                Temperature Monitoring
               </h2>
 
-              <p>
-                Here's what's happening across your cold-chain network today.
-              </p>
             </div>
 
-            <button
-              className="primary-button"
-              onClick={() => navigate("/batches")}
-            >
-              <span>＋</span>
-              Monitor New Batch
-            </button>
-
-          </section>
-
-          {/* ================= KPI CARDS ================= */}
-
-          <section className="stats-grid">
-
-            <div className="stat-card blue">
-
-              <div className="stat-top">
-                <div className="stat-icon">◈</div>
-                <MiniSparkline type="blue" />
-              </div>
-
-              <div className="stat-label">
-                TOTAL BATCHES
-              </div>
-
-              <div className="stat-value">
-                {stats.total || 24}
-              </div>
-
-              <div className="stat-bottom">
-                <span className="trend positive">
-                  ↗ 12.5%
-                </span>
-                <span>this month</span>
-              </div>
-
+            <div className="live-indicator">
+              <span></span>
+              LIVE
             </div>
 
-            <div className="stat-card green">
+          </div>
 
-              <div className="stat-top">
-                <div className="stat-icon">✓</div>
-                <MiniSparkline type="green" />
-              </div>
 
-              <div className="stat-label">
-                SAFE BATCHES
-              </div>
+          <div className="temperature-summary">
 
-              <div className="stat-value">
-                {stats.safe || 14}
-              </div>
+            <div>
+              <strong>6.5°C</strong>
+              <span>Average</span>
+            </div>
 
-              <div className="stat-bottom">
-                <span className="trend positive">
-                  ↗ 8.2%
-                </span>
-                <span>stable conditions</span>
-              </div>
+            <div>
+              <strong>8.7°C</strong>
+              <span>Highest</span>
+            </div>
+
+            <div>
+              <strong>3.8°C</strong>
+              <span>Lowest</span>
+            </div>
+
+          </div>
+
+
+          {/* CSS CHART */}
+
+          <div className="fake-chart">
+
+            <div className="chart-y-axis">
+
+              <span>10°</span>
+              <span>8°</span>
+              <span>6°</span>
+              <span>4°</span>
+              <span>2°</span>
 
             </div>
 
-            <div className="stat-card orange">
 
-              <div className="stat-top">
-                <div className="stat-icon">△</div>
-                <MiniSparkline type="orange" />
-              </div>
+            <div className="chart-area">
 
-              <div className="stat-label">
-                AT RISK
-              </div>
+              <div className="chart-grid-line"></div>
+              <div className="chart-grid-line"></div>
+              <div className="chart-grid-line"></div>
+              <div className="chart-grid-line"></div>
 
-              <div className="stat-value">
-                {stats.medium || 7}
-              </div>
 
-              <div className="stat-bottom">
-                <span className="trend warning">
-                  ↗ 4.1%
-                </span>
-                <span>needs attention</span>
-              </div>
+              <svg
+                className="temperature-svg"
+                viewBox="0 0 700 220"
+                preserveAspectRatio="none"
+              >
 
-            </div>
+                <defs>
 
-            <div className="stat-card red">
+                  <linearGradient
+                    id="chartGradient"
+                    x1="0"
+                    x2="1"
+                  >
 
-              <div className="stat-top">
-                <div className="stat-icon">!</div>
-                <MiniSparkline type="red" />
-              </div>
+                    <stop
+                      offset="0%"
+                      stopColor="#7c3aed"
+                    />
 
-              <div className="stat-label">
-                CRITICAL RISK
-              </div>
+                    <stop
+                      offset="100%"
+                      stopColor="#38bdf8"
+                    />
 
-              <div className="stat-value">
-                {stats.critical || 3}
-              </div>
+                  </linearGradient>
 
-              <div className="stat-bottom">
-                <span className="trend negative">
-                  ↗ 2.4%
-                </span>
-                <span>action required</span>
-              </div>
+                </defs>
 
-            </div>
 
-          </section>
-
-          {/* ================= ANALYTICS ROW ================= */}
-
-          <section className="analytics-grid">
-
-            {/* TEMPERATURE CHART */}
-
-            <div className="panel temperature-panel">
-
-              <div className="panel-header">
-
-                <div>
-                  <div className="panel-kicker">
-                    REAL-TIME MONITORING
-                  </div>
-
-                  <h3>
-                    Temperature Overview
-                  </h3>
-
-                  <p>
-                    Cold-chain temperature movement
-                  </p>
-                </div>
-
-                <div className="panel-actions">
-
-                  <button className="period active">
-                    24H
-                  </button>
-
-                  <button className="period">
-                    7D
-                  </button>
-
-                  <button className="expand">
-                    ⤢
-                  </button>
-
-                </div>
-
-              </div>
-
-              <div className="temperature-summary">
-
-                <strong>
-                  {Number(b002.temperature || 8.4).toFixed(1)}°C
-                </strong>
-
-                <span className="warning-text">
-                  ↗ Current temperature
-                </span>
-
-              </div>
-
-              <div className="chart-wrapper">
-
-                <div className="chart-y-axis">
-                  <span>10°C</span>
-                  <span>7.5°C</span>
-                  <span>5°C</span>
-                  <span>2.5°C</span>
-                  <span>0°C</span>
-                </div>
-
-                <TemperatureChart batch={b002} />
-
-              </div>
-
-              <div className="chart-x-axis">
-                <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>NOW</span>
-              </div>
-
-              <div className="chart-footer">
-
-                <div>
-                  <span className="legend-dot cyan" />
-                  Temperature
-                </div>
-
-                <div>
-                  <span className="legend-dot red" />
-                  Alert threshold
-                </div>
-
-                <span className="last-update">
-                  ● Updated just now
-                </span>
-
-              </div>
-
-            </div>
-
-            {/* RISK INDEX */}
-
-            <div className="panel risk-panel">
-
-              <div className="panel-header">
-
-                <div>
-                  <div className="panel-kicker">
-                    AI PREDICTION
-                  </div>
-
-                  <h3>
-                    Spoilage Risk Index
-                  </h3>
-
-                  <p>
-                    Current highest-risk batch
-                  </p>
-                </div>
-
-                <span className="live-badge">
-                  LIVE
-                </span>
-
-              </div>
-
-              <div className="risk-center">
-
-                <RiskGauge
-                  value={b002.riskScore || 78}
+                <path
+                  d="
+                    M0 150
+                    C50 135, 70 145, 110 125
+                    S180 95, 220 115
+                    S280 155, 320 125
+                    S380 80, 420 105
+                    S470 135, 510 95
+                    S570 70, 610 85
+                    S660 65, 700 50
+                  "
+                  fill="none"
+                  stroke="url(#chartGradient)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
                 />
 
-                <div className="risk-status">
-                  <span className="risk-status-dot" />
-                  {b002.riskLevel || "HIGH"} RISK
-                </div>
+              </svg>
+
+
+              <div className="chart-labels">
+
+                <span>08:00</span>
+                <span>10:00</span>
+                <span>12:00</span>
+                <span>14:00</span>
+                <span>16:00</span>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+
+        {/* AI RISK PANEL */}
+
+        <div className="dashboard-panel">
+
+          <div className="panel-header">
+
+            <div>
+
+              <div className="panel-label">
+                AI RISK ENGINE
+              </div>
+
+              <h2>
+                Current Spoilage Risk
+              </h2>
+
+            </div>
+
+            <div className="ai-badge">
+              AI PREDICTED
+            </div>
+
+          </div>
+
+
+          <div className="risk-content">
+
+            <div
+              className="risk-ring"
+              style={{
+                "--risk": `${averageRisk}%`,
+              }}
+            >
+
+              <div className="risk-ring-inner">
 
                 <strong>
-                  Batch {b002.batchId || "B002"}
+                  {averageRisk}%
                 </strong>
 
                 <span>
-                  {getProductIcon(b002.product)}{" "}
-                  {b002.product || "Strawberry"}
+                  MODERATE
                 </span>
 
               </div>
+
+            </div>
+
+
+            <div className="risk-info">
+
+              <div className="batch-name">
+                Fleet Average
+              </div>
+
+              <div className="risk-status">
+                MONITOR CLOSELY
+              </div>
+
 
               <div className="risk-metrics">
 
                 <div>
                   <span>Temperature</span>
-                  <strong>
-                    {b002.temperature || 8.4}°C
-                  </strong>
+                  <strong>6.5°C</strong>
                 </div>
 
                 <div>
                   <span>Humidity</span>
-                  <strong>
-                    {b002.humidity || 91}%
-                  </strong>
+                  <strong>77%</strong>
                 </div>
 
                 <div>
                   <span>Transit</span>
+                  <strong>22h</strong>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <div className="recommendation">
+
+            <div className="recommendation-icon">
+              !
+            </div>
+
+            <div>
+
+              <strong>
+                AI Recommendation
+              </strong>
+
+              <p>
+                Review high-risk batches and prioritize
+                delivery before risk increases further.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <button
+            className="secondary-button full"
+            onClick={() => navigate("/alerts")}
+          >
+            View Risk Alerts →
+          </button>
+
+        </div>
+
+      </section>
+
+
+
+      {/* ============================================
+          BATCH TABLE
+      ============================================ */}
+
+      <section className="dashboard-panel batches-panel">
+
+        <div className="panel-header">
+
+          <div>
+
+            <div className="panel-label">
+              LIVE INVENTORY
+            </div>
+
+            <h2>
+              Batch Risk Monitor
+            </h2>
+
+          </div>
+
+
+          <button
+            className="text-button"
+            onClick={() => navigate("/batches")}
+          >
+            View All Batches →
+          </button>
+
+        </div>
+
+
+        <div className="batch-table">
+
+
+          <div className="table-row table-heading">
+
+            <div>Batch</div>
+            <div>Temperature</div>
+            <div>Humidity</div>
+            <div>Transit</div>
+            <div>Risk</div>
+            <div>Action</div>
+
+          </div>
+
+
+          {batches.map((batch) => (
+
+            <div
+              className="table-row"
+              key={batch.batchId}
+            >
+
+              <div className="batch-cell">
+
+                <div className="product-icon">
+                  {batch.product === "Apple"
+                    ? "🍎"
+                    : batch.product === "Strawberry"
+                    ? "🍓"
+                    : batch.product === "Milk"
+                    ? "🥛"
+                    : batch.product === "Tomato"
+                    ? "🍅"
+                    : "🥭"}
+                </div>
+
+                <div>
+
                   <strong>
-                    {b002.transitTime || 18}h
+                    {batch.batchId}
                   </strong>
+
+                  <span>
+                    {batch.product}
+                  </span>
+
                 </div>
 
               </div>
 
-              <button
-                className="risk-action"
-                onClick={() =>
-                  navigate(`/batches/${b002.batchId || "B002"}`)
-                }
-              >
-                View Risk Analysis
-                <span>→</span>
-              </button>
 
-            </div>
+              <div>
+                {batch.temperature}°C
+              </div>
 
-          </section>
 
-          {/* ================= BOTTOM GRID ================= */}
+              <div>
+                {batch.humidity}%
+              </div>
 
-          <section className="bottom-grid">
 
-            {/* ALERTS */}
+              <div>
+                {batch.transitTime}h
+              </div>
 
-            <div className="panel alerts-panel">
 
-              <div className="panel-header">
+              <div>
 
-                <div>
-                  <div className="panel-kicker">
-                    ATTENTION REQUIRED
-                  </div>
-
-                  <h3>
-                    Live Alerts
-                  </h3>
-                </div>
-
-                <button
-                  className="view-all"
-                  onClick={() => navigate("/alerts")}
+                <span
+                  className={
+                    batch.risk >= 70
+                      ? "risk-pill high"
+                      : batch.risk >= 40
+                      ? "risk-pill medium"
+                      : "risk-pill low"
+                  }
                 >
-                  View all →
-                </button>
-
-              </div>
-
-              <div className="alerts-list">
-
-                {alerts.map((alert) => (
-
-                  <div
-                    className={`alert-row ${alert.type}`}
-                    key={alert.id}
-                  >
-
-                    <div className="alert-icon">
-                      {alert.icon}
-                    </div>
-
-                    <div className="alert-info">
-
-                      <strong>
-                        {alert.title}
-                      </strong>
-
-                      <span>
-                        Batch {alert.batch} · {alert.text}
-                      </span>
-
-                    </div>
-
-                    <div className="alert-risk">
-                      <strong>
-                        {alert.risk}%
-                      </strong>
-
-                      <span>
-                        risk
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        navigate(`/batches/${alert.batch}`)
-                      }
-                    >
-                      →
-                    </button>
-
-                  </div>
-
-                ))}
-
-              </div>
-
-            </div>
-
-            {/* COLD CHAIN JOURNEY */}
-
-            <div className="panel journey-panel">
-
-              <div className="panel-header">
-
-                <div>
-                  <div className="panel-kicker">
-                    SUPPLY CHAIN
-                  </div>
-
-                  <h3>
-                    Cold-Chain Journey
-                  </h3>
-                </div>
-
-                <span className="live-badge">
-                  LIVE
+                  {batch.risk}%
                 </span>
 
               </div>
 
-              <div className="journey">
-
-                <div className="journey-line">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-
-                <div className="journey-step completed">
-                  <div>🌾</div>
-                  <strong>Farm</strong>
-                  <span>Origin</span>
-                </div>
-
-                <div className="journey-step completed">
-                  <div>❄</div>
-                  <strong>Storage</strong>
-                  <span>Controlled</span>
-                </div>
-
-                <div className="journey-step current">
-                  <div>🚚</div>
-                  <strong>Transport</strong>
-                  <span>Monitoring</span>
-                </div>
-
-                <div className="journey-step">
-                  <div>🏪</div>
-                  <strong>Market</strong>
-                  <span>Destination</span>
-                </div>
-
-              </div>
-
-              <div className="journey-info">
-
-                <div>
-                  <span>ACTIVE BATCH</span>
-                  <strong>
-                    B002 · Strawberry
-                  </strong>
-                </div>
-
-                <div>
-                  <span>LOCATION</span>
-                  <strong>
-                    Chandigarh
-                  </strong>
-                </div>
-
-                <div>
-                  <span>STATUS</span>
-                  <strong className="danger-text">
-                    Attention Required
-                  </strong>
-                </div>
-
-              </div>
-
-            </div>
-
-          </section>
-
-          {/* ================= BATCH TABLE ================= */}
-
-          <section className="panel batches-panel">
-
-            <div className="panel-header">
 
               <div>
-                <div className="panel-kicker">
-                  INVENTORY MONITORING
-                </div>
 
-                <h3>
-                  Active Batches
-                </h3>
+                <button
+                  className="row-action"
+                  onClick={() =>
+                    navigate(
+                      `/batch/${batch.batchId}`
+                    )
+                  }
+                >
+                  Inspect →
+                </button>
+
               </div>
 
-              <button
-                className="view-all"
-                onClick={() => navigate("/batches")}
-              >
-                Manage batches →
-              </button>
-
             </div>
 
-            <div className="table-container">
-
-              <table>
-
-                <thead>
-                  <tr>
-                    <th>BATCH</th>
-                    <th>PRODUCT</th>
-                    <th>LOCATION</th>
-                    <th>TEMPERATURE</th>
-                    <th>HUMIDITY</th>
-                    <th>RISK</th>
-                    <th>STATUS</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-
-                  {batches.slice(0, 5).map((batch) => (
-
-                    <tr
-                      key={batch.batchId}
-                      onClick={() =>
-                        navigate(`/batches/${batch.batchId}`)
-                      }
-                    >
-
-                      <td>
-                        <strong className="batch-id">
-                          {batch.batchId}
-                        </strong>
-                      </td>
-
-                      <td>
-                        <span className="product-name">
-                          {getProductIcon(batch.product)}
-                          {batch.product}
-                        </span>
-                      </td>
-
-                      <td>
-                        {batch.location || "—"}
-                      </td>
-
-                      <td>
-                        <strong>
-                          {batch.temperature}°C
-                        </strong>
-                      </td>
-
-                      <td>
-                        {batch.humidity}%
-                      </td>
-
-                      <td>
-                        <div className="risk-number">
-                          <strong>
-                            {batch.riskScore}%
-                          </strong>
-
-                          <div className="risk-bar">
-                            <span
-                              className={getStatusClass(
-                                batch.riskLevel
-                              )}
-                              style={{
-                                width: `${batch.riskScore}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      <td>
-                        <span
-                          className={`status-pill ${getStatusClass(
-                            batch.riskLevel
-                          )}`}
-                        >
-                          <span />
-                          {batch.riskLevel}
-                        </span>
-                      </td>
-
-                    </tr>
-
-                  ))}
-
-                </tbody>
-
-              </table>
-
-            </div>
-
-          </section>
-
-          <footer className="dashboard-footer">
-            <span>FreshSense AI Monitoring System</span>
-            <span>Monitor · Predict · Save</span>
-            <span>v1.0 Demo</span>
-          </footer>
+          ))}
 
         </div>
 
-      </main>
+      </section>
 
-    </div>
+
+
+      {/* ============================================
+          JOURNEY
+      ============================================ */}
+
+      <section className="journey-section">
+
+        <div className="journey-title">
+
+          <div className="panel-label">
+            SUPPLY CHAIN JOURNEY
+          </div>
+
+          <h2>
+            Cold-Chain Tracking
+          </h2>
+
+        </div>
+
+
+        <div className="journey">
+
+
+          <div className="journey-node active">
+
+            <div className="journey-icon">
+              🏭
+            </div>
+
+            <strong>
+              Warehouse
+            </strong>
+
+            <span>
+              Origin
+            </span>
+
+          </div>
+
+
+          <div className="journey-line"></div>
+
+
+          <div className="journey-node active">
+
+            <div className="journey-icon">
+              🚚
+            </div>
+
+            <strong>
+              In Transit
+            </strong>
+
+            <span>
+              Live monitoring
+            </span>
+
+          </div>
+
+
+          <div className="journey-line"></div>
+
+
+          <div className="journey-node">
+
+            <div className="journey-icon">
+              🏪
+            </div>
+
+            <strong>
+              Distribution
+            </strong>
+
+            <span>
+              Next stage
+            </span>
+
+          </div>
+
+
+          <div className="journey-line"></div>
+
+
+          <div className="journey-node">
+
+            <div className="journey-icon">
+              🛒
+            </div>
+
+            <strong>
+              Retail
+            </strong>
+
+            <span>
+              Destination
+            </span>
+
+          </div>
+
+
+        </div>
+
+      </section>
+
+
+    </main>
+
   );
+
 }
+
+export default Dashboard;
